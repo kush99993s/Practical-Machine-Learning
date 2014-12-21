@@ -1,0 +1,115 @@
+---
+title: "Practical Machine Learning Project"
+author: "Kush99993s"
+---
+**Background:**
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+**Summary:**
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: 
+
+exactly according to the specification (Class A)
+throwing the elbows to the front (Class B)
+lifting the dumbbell only halfway (Class C)
+lowering the dumbbell only halfway (Class D)
+throwing the hips to the front (Class E)
+Read more: http://groupware.les.inf.puc-rio.br/har#weight_lifting_exercises#ixzz3AgifC0Uo 
+Due to extremely long running time with caret's train function, parallel processing and randomForest's randomForest method are chosen(~1 min).
+
+**Loading Data**
+
+```{r,echo=TRUE,results='hide'}
+if (!file.exists("~/Data/PML/pml-training.csv")){
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                "~/Data/PML/pml-training.csv")
+}
+if (!file.exists("~/Data/PML/pml-testing.csv")){
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                "~/Data/PML/pml-testing.csv")
+}
+data = read.csv("~/Data/PML/pml-training.csv", na.strings = c("NA", ""))
+final_Testing= read.csv("~/Data/PML/pml-testing.csv", na.strings = c("NA", ""))
+
+```
+
+**Data Cleaning**
+
+In this step, we will remove column which have very hig number of NA. Here I used 8000, about 50% of total number row.     
+```{r,echo=TRUE}
+data <- data[,-1]
+final_Testing<- final_Testing[,-1]
+dim(data)
+summary(data$classe)
+col2remove <- apply(!is.na(data), 2, sum)>8000
+data <- data[,col2remove]
+final_Testing <- final_Testing[,col2remove]
+
+```
+
+As we can see that there are user_name, cvtd_timestamp, new_window,classe are factors. Therefore we need to convert thoese veriable to factor variable for better prediction
+
+```{r,echo=TRUE}
+data$user_name <- factor(data$user_name)
+data$cvtd_timestamp <-  factor(data$cvtd_timestamp)
+data$new_window <- factor(data$new_window)
+data$classe <- factor(data$classe)
+
+final_Testing$user_name <- factor(final_Testing$user_name)
+final_Testing$cvtd_timestamp <-  factor(final_Testing$cvtd_timestamp)
+final_Testing$new_window <- factor(final_Testing$new_window)
+```
+
+now we will set seed number to 1000 and load two library caret and randomforest
+```{r,echo=TRUE,results='hide'}
+set.seed(1000)
+library("caret")
+library("randomForest")
+```
+
+**Creating Testing(cross validation set) and Traning data set from data set.**
+
+```{r,echo=TRUE}
+inTrain = createDataPartition(y=data$classe, p=0.75, list=FALSE)
+training = data[inTrain,]
+testing = data[-inTrain,]
+str(training)
+```
+**Removing non prediction variable**
+
+Here we know that user_name, and different timestep will not able to help us to predict right classe. Therefore reomveing from traning data set which will be used for modeling
+
+```{r,echo=TRUE}
+training = training[,-c(1:6)]
+```
+
+**Model fetting**
+
+here we choose random forest
+```{r,echo=TRUE, eval=FALSE}
+modFit <- train(classe ~., method="rf", data=training,  trControl=trainControl(method='cv'), allowParallel=TRUE  )
+saveRDS(modFit, "rfmodel.RDS")
+```
+
+```{r,echo=FALSE,eval=TRUE}
+modFit = readRDS("~/data/PML/rfmodel.RDS")
+```
+
+*In sample error and confusion metrix*
+```{r,echo=TRUE}
+trainingGuess <- predict(modFit, training)
+confusionMatrix(trainingGuess, training$classe)
+```
+*Out of sample error prediction and confusion metrix. we Expect out sample error should be less than 2 percent and higher than 0.5 percent*
+
+```{r,echo=TRUE}
+Cross_Validation_Guess <- predict(modFit, testing)
+confusionMatrix(Cross_Validation_Guess, testing$classe)
+```
+*Final result for training data set*
+```{r,echo=TRUE}
+FinalTestingGuess <-as.data.frame(predict(modFit, final_Testing))
+FinalTestingGuessResult<- cbind(c(1:20), FinalTestingGuess)
+colnames(FinalTestingGuessResult)<-c("Problem ID", "predicted classe")
+FinalTestingGuessResult
+```
